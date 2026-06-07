@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>moneyflow — paycheck distribution canvas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+:root {
+  --r-card: 18px;
+  --font: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+body { font-family: var(--font); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body.grabbing, body.grabbing * { cursor: grabbing !important; }
+#root { height: 100%; }
+
+/* ---------- theme tokens ---------- */
+.app {
+  height: 100%; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+}
+.app[data-theme="cloud"] {
+  --bg:#F3F6FB; --canvas:#F3F6FB; --grid:#D8E1EE; --ink:#0F1B2D; --muted:#647088;
+  --line:#E4EAF3; --card:#FFFFFF; --card-line:#EAEFF6; --accent:#10B981; --accent-soft:#ECFDF5;
+  --toolbar:#FFFFFFEE; --shadow:0 10px 28px -14px rgba(20,40,80,.28), 0 2px 6px -2px rgba(20,40,80,.10);
+  --r-card:18px;
+}
+.app[data-theme="mint"] {
+  --bg:#EAF4EE; --canvas:#EAF4EE; --grid:#CBE5D6; --ink:#11271C; --muted:#5C7567;
+  --line:#D6E8DD; --card:#FFFFFF; --card-line:#E1EFE7; --accent:#0E9F6E; --accent-soft:#E7F8EF;
+  --toolbar:#FBFEFCEE; --shadow:0 10px 26px -14px rgba(16,70,45,.30), 0 2px 6px -2px rgba(16,70,45,.10);
+  --r-card:20px;
+}
+.app[data-theme="paper"] {
+  --bg:#F5EFE3; --canvas:#F6F1E7; --grid:#E3D8C2; --ink:#2C2417; --muted:#897B61;
+  --line:#E7DDC9; --card:#FFFDF8; --card-line:#ECE2D0; --accent:#C2761F; --accent-soft:#FBEFDC;
+  --toolbar:#FCF8F0EE; --shadow:0 10px 24px -14px rgba(90,66,20,.30), 0 2px 5px -2px rgba(90,66,20,.12);
+  --r-card:13px;
+}
+.app[data-theme="slate"] {
+  --bg:#EAEEF4; --canvas:#E7ECF3; --grid:#CFD8E4; --ink:#0E1626; --muted:#5A667C;
+  --line:#DCE3EC; --card:#FFFFFF; --card-line:#E6EBF2; --accent:#4F46E5; --accent-soft:#EEF1FE;
+  --toolbar:#FFFFFFEE; --shadow:0 8px 20px -12px rgba(20,30,60,.30), 0 1px 3px -1px rgba(20,30,60,.14);
+  --r-card:11px;
+}
+
+/* ---------- toolbar ---------- */
+.toolbar {
+  flex: 0 0 auto; height: 62px; display: flex; align-items: center; gap: 14px;
+  padding: 0 18px; background: var(--toolbar); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line); z-index: 30; position: relative;
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+  background: var(--accent); color: #fff; box-shadow: 0 6px 14px -6px var(--accent);
+}
+.brand-text { font-weight: 700; font-size: 18px; letter-spacing: -.02em; color: var(--ink); }
+.brand-text span { color: var(--accent); }
+.tb-divider { width: 1px; height: 26px; background: var(--line); }
+.tb-group { display: flex; align-items: center; gap: 9px; }
+.tb-spacer { flex: 1; }
+
+.tb-btn {
+  display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px;
+  border-radius: 11px; font-family: var(--font); font-weight: 600; font-size: 13.5px;
+  cursor: pointer; border: 1px solid transparent; transition: transform .08s ease, box-shadow .15s ease, background .15s ease;
+}
+.tb-btn:active { transform: translateY(1px); }
+.tb-btn.primary { background: var(--accent); color: #fff; box-shadow: 0 8px 16px -8px var(--accent); }
+.tb-btn.primary:hover { filter: brightness(1.04); }
+.tb-btn.ghost { background: transparent; color: var(--muted); border-color: var(--line); width: 38px; padding: 0; justify-content: center; }
+.tb-btn.ghost:hover { color: var(--ink); background: var(--bg); }
+
+.preset-select {
+  position: relative; display: inline-flex; align-items: center; height: 38px;
+  border: 1px solid var(--line); border-radius: 11px; background: var(--card); padding: 0 8px 0 11px;
+}
+.preset-select .preset-ico { color: var(--muted); display: flex; margin-right: 4px; }
+.preset-select select {
+  appearance: none; -webkit-appearance: none; border: 0; background: transparent;
+  font-family: var(--font); font-weight: 600; font-size: 13.5px; color: var(--ink);
+  padding: 0 22px 0 4px; height: 100%; cursor: pointer; outline: none;
+}
+.preset-select::after {
+  content: ""; position: absolute; right: 12px; width: 8px; height: 8px; pointer-events: none;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg) translateY(-2px);
+}
+
+/* summary */
+.summary { display: flex; align-items: center; gap: 14px; padding: 6px 6px 6px 0; }
+.sum-item { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.sum-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.sum-val { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.sum-sep { width: 1px; height: 26px; background: var(--line); }
+.sum-item.free.good .sum-val { color: var(--accent); }
+.sum-item.free.warn .sum-val { color: #C2761F; }
+.sum-item.free.bad .sum-val { color: #E11D48; }
+.sum-item.free.bad .sum-lbl { color: #E11D48; }
+
+/* ---------- canvas / board ---------- */
+.canvas { flex: 1 1 auto; position: relative; overflow: hidden; background: var(--canvas); cursor: grab; }
+.canvas:active { cursor: grabbing; }
+.board { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.grid-bg { position: absolute; left: -8000px; top: -8000px; width: 24000px; height: 24000px; pointer-events: none; }
+.grid-dots .grid-bg {
+  background-image: radial-gradient(circle, var(--grid) 1.5px, transparent 1.6px);
+  background-size: 24px 24px; background-position: 0 0;
+}
+.grid-lines .grid-bg {
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px; opacity: .7;
+}
+.grid-none .grid-bg { background: none; }
+
+/* ---------- edges ---------- */
+.edge-layer { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.edge { pointer-events: auto; }
+.edge path { transition: stroke-width .12s ease; }
+.edge.is-dim { opacity: .45; }
+.edge-snake { stroke-dasharray: 6 7; animation: march 1s linear infinite; }
+.edge-dots { stroke-dasharray: 0.1 9; stroke-linecap: round; animation: march 1.2s linear infinite; }
+.edge-solid { stroke-dasharray: none; }
+@keyframes march { to { stroke-dashoffset: -13; } }
+@media (prefers-reduced-motion: reduce) { .edge-snake, .edge-dots { animation: none; } }
+.edge-temp { stroke-dasharray: 7 7; opacity: .8; animation: march 0.9s linear infinite; pointer-events: none; }
+
+/* edge pill */
+.pill-layer { position: absolute; left: 0; top: 0; }
+.edge-pill { position: absolute; transform: translate(-50%, -50%); z-index: 5; }
+.edge-pill-face {
+  display: flex; flex-direction: column; align-items: center; gap: 0; line-height: 1.05;
+  padding: 5px 11px; border-radius: 999px; cursor: pointer; font-family: var(--font);
+  background: var(--card); border: 1.5px solid var(--pill-ring);
+  box-shadow: 0 4px 10px -5px rgba(20,40,80,.28); transition: transform .1s ease, box-shadow .15s ease;
+}
+.edge-pill-face:hover { transform: translateY(-1px); box-shadow: 0 7px 14px -6px rgba(20,40,80,.32); }
+.edge-pill-primary { font-weight: 600; font-size: 12px; color: var(--pill-ink); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.edge-pill-secondary { font-weight: 500; font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.edge-pill.is-sel .edge-pill-face { border-color: var(--pill-ink); box-shadow: 0 0 0 3px var(--pill-soft), 0 6px 14px -6px rgba(20,40,80,.3); }
+.edge-pill-edit {
+  display: inline-flex; align-items: center; gap: 1px; background: var(--card);
+  border: 1.5px solid var(--pill-ink); border-radius: 999px; padding: 4px 10px;
+  box-shadow: 0 0 0 3px var(--pill-soft);
+}
+.edge-pill-edit input {
+  width: 52px; border: 0; outline: 0; background: transparent; font-family: var(--font);
+  font-weight: 600; font-size: 12px; color: var(--pill-ink); text-align: center; font-variant-numeric: tabular-nums;
+}
+.edge-pill-unit { font-weight: 600; font-size: 12px; color: var(--pill-ink); }
+.edge-pill-del {
+  position: absolute; top: -9px; right: -9px; width: 20px; height: 20px; border-radius: 50%;
+  border: 0; background: #E11D48; color: #fff; display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 3px 7px -2px rgba(225,29,72,.5);
+}
+
+/* ---------- node card ---------- */
+.node {
+  position: absolute; width: 232px; background: var(--card); border: 1px solid var(--card-line);
+  border-radius: var(--r-card); box-shadow: var(--shadow); user-select: none; cursor: grab;
+  transition: box-shadow .15s ease, border-color .15s ease, transform .06s ease;
+}
+.node:active { cursor: grabbing; }
+.node:hover { box-shadow: 0 16px 34px -16px rgba(20,40,80,.34), 0 2px 6px -2px rgba(20,40,80,.12); }
+.node.is-sel { border-color: var(--c-line); box-shadow: 0 0 0 3px var(--c-ring), var(--shadow); }
+.node.is-target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
+.node.is-income { box-shadow: 0 16px 36px -16px rgba(16,120,80,.4), 0 2px 6px -2px rgba(20,40,80,.12); }
+
+.node-head { display: flex; align-items: center; gap: 9px; padding: 13px 13px 9px; }
+.node-chip {
+  flex: 0 0 auto; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--c-soft); color: var(--c-ink); border: 0; cursor: pointer; transition: transform .1s ease;
+}
+.node-chip:hover { transform: scale(1.06); }
+.node.is-income .node-chip { background: var(--accent); color: #fff; cursor: default; }
+.node-name {
+  flex: 1 1 auto; min-width: 0; border: 0; background: transparent; outline: none; font-family: var(--font);
+  font-weight: 600; font-size: 14px; color: var(--ink); letter-spacing: -.005em; padding: 3px 5px; border-radius: 7px;
+}
+.node-name-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 20px; cursor: grab; }
+.node:active .node-name-txt { cursor: grabbing; }
+.node-name.editing { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+.node-name:focus { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+.node-del {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px; border: 0; background: transparent;
+  color: var(--muted); cursor: pointer; display: grid; place-items: center; opacity: 0; transition: opacity .12s ease, background .12s ease, color .12s;
+}
+.node:hover .node-del { opacity: 1; }
+.node-del:hover { background: #FFF1F2; color: #E11D48; }
+
+.node-body { padding: 0 14px 13px; }
+.amount-field { display: flex; align-items: baseline; gap: 2px; padding: 2px 0 6px; }
+.amount-cur { font-size: 15px; font-weight: 500; color: var(--muted); }
+.amount-input {
+  width: 100%; border: 0; outline: none; background: transparent; font-family: var(--font);
+  font-weight: 600; font-size: 23px; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; padding: 0;
+}
+.node-amount { font-weight: 600; font-size: 22px; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; padding: 2px 0 8px; }
+
+.node-meter { height: 6px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+.node-meter-fill { height: 100%; border-radius: 999px; background: var(--c-line); transition: width .25s cubic-bezier(.4,0,.2,1); }
+.node.is-income .node-meter-fill { background: var(--accent); }
+.node-meter-fill.is-over { background: #E11D48; }
+
+.node-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 11px; }
+.mode-toggle { display: inline-flex; background: var(--bg); border-radius: 9px; padding: 2px; gap: 2px; }
+.mode-toggle button {
+  width: 30px; height: 26px; border: 0; border-radius: 7px; background: transparent; cursor: pointer;
+  font-family: var(--font); font-weight: 600; font-size: 13px; color: var(--muted); transition: all .12s ease;
+}
+.mode-toggle button.on { background: var(--card); color: var(--ink); box-shadow: 0 2px 5px -2px rgba(20,40,80,.25); }
+
+.leftover { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.12; }
+.leftover-lbl { font-size: 9.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.leftover-val { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--ink); }
+.leftover.good .leftover-val, .leftover.good .leftover-lbl { color: var(--accent); }
+.leftover.warn .leftover-val { color: #C2761F; }
+.leftover.bad .leftover-val, .leftover.bad .leftover-lbl { color: #E11D48; }
+.leftover.calm .leftover-val { color: var(--c-ink); }
+
+/* handles */
+.handle { position: absolute; top: 30px; width: 22px; height: 22px; transform: translateY(-50%); display: grid; place-items: center; z-index: 4; }
+.handle-out { right: -11px; cursor: crosshair; }
+.handle-in { left: -11px; }
+.handle span {
+  width: 13px; height: 13px; border-radius: 50%; background: var(--card); border: 2.5px solid var(--c-line);
+  transition: transform .12s ease, background .12s ease; box-shadow: 0 1px 3px rgba(20,40,80,.2);
+}
+.node.is-income .handle-out span { border-color: var(--accent); }
+.handle-out:hover span { transform: scale(1.32); background: var(--c-line); }
+.node.is-income .handle-out:hover span { background: var(--accent); }
+.handle-in span { border-color: var(--muted); opacity: .55; }
+.node.is-target .handle-in span { border-color: var(--accent); background: var(--accent); opacity: 1; transform: scale(1.25); }
+
+/* ---------- hint bar ---------- */
+.hint-bar {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 25;
+  display: flex; gap: 18px; align-items: center; padding: 9px 16px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
+  font-size: 12px; color: var(--muted); white-space: nowrap;
+}
+.hint-bar b { color: var(--ink); font-weight: 700; }
+.hint-bar span:not(:last-child) { padding-right: 18px; border-right: 1px solid var(--line); }
+@media (max-width: 880px) { .hint-bar { display: none; } .summary .sum-item:not(.free) { display: none; } .summary .sum-sep { display:none; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+
+// ─── graph.jsx — data model, palette, icons, presets, flow math ───────────────
+
+function fmtMoney(n, opts) {
+  const showCents = opts && opts.cents;
+  const v = Math.abs(n) < 0.005 ? 0 : n;
+  return '$' + v.toLocaleString('en-US', {
+    minimumFractionDigits: showCents ? 2 : 0,
+    maximumFractionDigits: showCents ? 2 : 0,
+  });
+}
+function fmtPct(n) {
+  const v = Math.round(n * 10) / 10;
+  return (Number.isInteger(v) ? v : v.toFixed(1)) + '%';
+}
+function uid(prefix) {
+  return (prefix || 'id') + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+const PALETTE = [
+  { key: 'emerald', soft: '#ECFDF5', ink: '#047857', line: '#10B981', ring: '#A7F3D0' },
+  { key: 'sky',     soft: '#EFF6FF', ink: '#1D4ED8', line: '#3B82F6', ring: '#BFDBFE' },
+  { key: 'violet',  soft: '#F5F3FF', ink: '#6D28D9', line: '#8B5CF6', ring: '#DDD6FE' },
+  { key: 'amber',   soft: '#FFFBEB', ink: '#B45309', line: '#F59E0B', ring: '#FDE68A' },
+  { key: 'rose',    soft: '#FFF1F2', ink: '#BE123C', line: '#F43F5E', ring: '#FECDD3' },
+  { key: 'teal',    soft: '#F0FDFA', ink: '#0F766E', line: '#14B8A6', ring: '#99F6E4' },
+  { key: 'indigo',  soft: '#EEF2FF', ink: '#4338CA', line: '#6366F1', ring: '#C7D2FE' },
+  { key: 'fuchsia', soft: '#FDF4FF', ink: '#A21CAF', line: '#D946EF', ring: '#F5D0FE' },
+];
+function colorFor(key) {
+  return PALETTE.find(p => p.key === key) || PALETTE[0];
+}
+
+const ICONS = {
+  wallet: 'M3 7.5A2.5 2.5 0 0 1 5.5 5H17a2 2 0 0 1 2 2v0H5.5A2.5 2.5 0 0 1 3 7.5Zm0 0V17a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6m11.5 2.5h.01',
+  home: 'M4 11.5 12 4l8 7.5M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9',
+  piggy: 'M16 8c2.5 0 4.5 2 4.5 4.5 0 1.4-.7 2.7-1.7 3.5l.7 2.5h-2.5l-.5-1.6c-.5.1-1 .1-1.5.1H11l-.6 1.5H8l.3-2.2C6.9 16.7 6 15 6 13.5 6 10.7 8.7 8 12 8h4Zm-1 3.5h.01M5.5 11.5C4.7 11.5 4 10.8 4 10s.7-1.5 1.5-1.5',
+  cart: 'M4 5h2l1.5 9.5a1.5 1.5 0 0 0 1.5 1.3h7a1.5 1.5 0 0 0 1.5-1.2L20 8H7m2 11.5h.01M17 19.5h.01',
+  bolt: 'M13 3 5 13h6l-1 8 8-10h-6l1-8Z',
+  trend: 'M4 16l5-5 3 3 7-7m0 0h-4m4 0v4',
+  card: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Zm0 3h18M6.5 15.5H10',
+  heart: 'M12 20s-7-4.6-7-9.5A4 4 0 0 1 12 8a4 4 0 0 1 7 2.5C19 15.4 12 20 12 20Z',
+  target: 'M12 12m-8 0a8 8 0 1 0 16 0 8 8 0 1 0-16 0M12 12m-4 0a4 4 0 1 0 8 0 4 4 0 1 0-8 0M12 12h.01',
+  umbrella: 'M12 4v2m0 0a8 8 0 0 1 8 8H4a8 8 0 0 1 8-8Zm0 8v5a2 2 0 0 0 4 0',
+  plane: 'M21 15.5 14 13V6.5a1.5 1.5 0 0 0-3 0V13L4 15.5V17l7-1.5V19l-2 1.2V21l3-1 3 1v-.8L13 19v-3.5L21 17v-1.5Z',
+  coins: 'M9 8m-5 0a5 3 0 1 0 10 0 5 3 0 1 0-10 0M4 8v4c0 1.7 2.2 3 5 3M14 13c2.8 0 5-1.3 5-3m-5 7c2.8 0 5-1.3 5-3v-8m-5 3c-2.8 0-5-1.3-5-3',
+  bag: 'M6 8h12l-.8 11a1 1 0 0 1-1 .9H7.8a1 1 0 0 1-1-.9L6 8Zm3 0V6a3 3 0 0 1 6 0v2',
+  plus: 'M12 5v14M5 12h14',
+};
+
+function presetFifty() {
+  const inc = { id: 'income', type: 'income', name: 'Paycheck', icon: 'wallet', mode: '%', x: 80, y: 280, amount: 4200 };
+  const needs = { id: uid('n'), type: 'bucket', name: 'Needs', icon: 'home', color: 'sky', mode: '%', x: 480, y: 110 };
+  const wants = { id: uid('n'), type: 'bucket', name: 'Wants', icon: 'heart', color: 'violet', mode: '%', x: 480, y: 300 };
+  const save  = { id: uid('n'), type: 'bucket', name: 'Savings', icon: 'piggy', color: 'emerald', mode: '%', x: 480, y: 490 };
+  return {
+    nodes: [inc, needs, wants, save],
+    edges: [
+      { id: uid('e'), from: inc.id, to: needs.id, value: 50 },
+      { id: uid('e'), from: inc.id, to: wants.id, value: 30 },
+      { id: uid('e'), from: inc.id, to: save.id, value: 20 },
+    ],
+  };
+}
+
+function presetDetailed() {
+  const inc   = { id: 'income', type: 'income', name: 'Paycheck', icon: 'wallet', mode: '%', x: 60, y: 320, amount: 5000 };
+  const needs = { id: uid('n'), type: 'bucket', name: 'Essentials', icon: 'home', color: 'sky', mode: '$', x: 430, y: 90 };
+  const fun   = { id: uid('n'), type: 'bucket', name: 'Lifestyle', icon: 'bag', color: 'violet', mode: '%', x: 430, y: 330 };
+  const save  = { id: uid('n'), type: 'bucket', name: 'Savings', icon: 'piggy', color: 'emerald', mode: '%', x: 430, y: 560 };
+  const rent  = { id: uid('n'), type: 'bucket', name: 'Rent', icon: 'home', color: 'sky', mode: '$', x: 820, y: 40 };
+  const bills = { id: uid('n'), type: 'bucket', name: 'Utilities', icon: 'bolt', color: 'amber', mode: '$', x: 820, y: 200 };
+  const food  = { id: uid('n'), type: 'bucket', name: 'Groceries', icon: 'cart', color: 'teal', mode: '$', x: 820, y: 360 };
+  const emer  = { id: uid('n'), type: 'bucket', name: 'Emergency', icon: 'umbrella', color: 'rose', mode: '%', x: 820, y: 520 };
+  const invest= { id: uid('n'), type: 'bucket', name: 'Investing', icon: 'trend', color: 'indigo', mode: '%', x: 820, y: 680 };
+  return {
+    nodes: [inc, needs, fun, save, rent, bills, food, emer, invest],
+    edges: [
+      { id: uid('e'), from: inc.id, to: needs.id, value: 60 },
+      { id: uid('e'), from: inc.id, to: fun.id, value: 25 },
+      { id: uid('e'), from: inc.id, to: save.id, value: 15 },
+      { id: uid('e'), from: needs.id, to: rent.id, value: 1800 },
+      { id: uid('e'), from: needs.id, to: bills.id, value: 240 },
+      { id: uid('e'), from: needs.id, to: food.id, value: 600 },
+      { id: uid('e'), from: save.id, to: emer.id, value: 40 },
+      { id: uid('e'), from: save.id, to: invest.id, value: 60 },
+    ],
+  };
+}
+
+function presetZero() {
+  const inc = { id: 'income', type: 'income', name: 'Paycheck', icon: 'wallet', mode: '$', x: 80, y: 300, amount: 3000 };
+  const rent = { id: uid('n'), type: 'bucket', name: 'Rent', icon: 'home', color: 'sky', mode: '$', x: 470, y: 80 };
+  const food = { id: uid('n'), type: 'bucket', name: 'Groceries', icon: 'cart', color: 'teal', mode: '$', x: 470, y: 240 };
+  const debt = { id: uid('n'), type: 'bucket', name: 'Debt Payoff', icon: 'card', color: 'rose', mode: '$', x: 470, y: 400 };
+  const save = { id: uid('n'), type: 'bucket', name: 'Savings', icon: 'piggy', color: 'emerald', mode: '$', x: 470, y: 560 };
+  return {
+    nodes: [inc, rent, food, debt, save],
+    edges: [
+      { id: uid('e'), from: inc.id, to: rent.id, value: 1100 },
+      { id: uid('e'), from: inc.id, to: food.id, value: 500 },
+      { id: uid('e'), from: inc.id, to: debt.id, value: 700 },
+      { id: uid('e'), from: inc.id, to: save.id, value: 700 },
+    ],
+  };
+}
+
+const PRESETS = {
+  'fifty': { label: '50 / 30 / 20', sub: 'Needs · Wants · Savings', build: presetFifty },
+  'detailed': { label: 'Full Breakdown', sub: 'Multi-level buckets', build: presetDetailed },
+  'zero': { label: 'Zero-Based', sub: 'Every dollar a job', build: presetZero },
+};
+
+function computeFlow(nodes, edges) {
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+  const outgoing = {}; const incoming = {};
+  nodes.forEach(n => { outgoing[n.id] = []; incoming[n.id] = []; });
+  edges.forEach(e => {
+    if (nodeMap[e.from] && nodeMap[e.to] && e.from !== e.to) {
+      outgoing[e.from].push(e);
+      incoming[e.to].push(e);
+    }
+  });
+
+  const indeg = {};
+  nodes.forEach(n => { indeg[n.id] = incoming[n.id].length; });
+  const queue = nodes.filter(n => indeg[n.id] === 0).map(n => n.id);
+  const order = [];
+  while (queue.length) {
+    const id = queue.shift();
+    order.push(id);
+    outgoing[id].forEach(e => {
+      indeg[e.to]--;
+      if (indeg[e.to] === 0) queue.push(e.to);
+    });
+  }
+  let hasCycle = false;
+  nodes.forEach(n => { if (order.indexOf(n.id) === -1) { order.push(n.id); hasCycle = true; } });
+
+  const received = {}; const allocated = {}; const leftover = {}; const edgeAmt = {};
+  nodes.forEach(n => { received[n.id] = (n.type === 'income' ? (Number(n.amount) || 0) : 0); });
+
+  order.forEach(id => {
+    const node = nodeMap[id];
+    const avail = received[id];
+    let alloc = 0;
+    outgoing[id].forEach(e => {
+      let amt;
+      if (node.mode === '%') amt = avail * (Number(e.value) || 0) / 100;
+      else amt = Number(e.value) || 0;
+      if (amt < 0) amt = 0;
+      edgeAmt[e.id] = amt;
+      alloc += amt;
+      received[e.to] = (received[e.to] || 0) + amt;
+    });
+    allocated[id] = alloc;
+    leftover[id] = avail - alloc;
+  });
+
+  return { received, allocated, leftover, edgeAmt, order, hasCycle, outgoing, incoming };
+}
+
+// ─── tweaks-panel.jsx ─────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+  .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+  .twk-num{display:flex;align-items:center;box-sizing:border-box;min-width:0;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+  .twk-chips{display:flex;gap:6px}
+  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+    transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+  .twk-chip:hover{transform:translateY(-1px);
+    box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),0 2px 6px rgba(0,0,0,.15)}
+  .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+    display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i:first-child{box-shadow:none}
+  .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+`;
+
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+function TweaksPanel({ title = 'Tweaks', children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(clampToViewport) : null;
+    if (ro) { ro.observe(document.documentElement); return () => ro.disconnect(); }
+    window.addEventListener('resize', clampToViewport);
+    return () => window.removeEventListener('resize', clampToViewport);
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  // Expose open toggle so toolbar button can trigger it
+  React.useEffect(() => { window.__tweaksOpen = setOpen; }, []);
+
+  const dismiss = () => { setOpen(false); };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = { x: startRight - (ev.clientX - sx), y: startBottom - (ev.clientY - sy) };
+      clampToViewport();
+    };
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks" onMouseDown={(e) => e.stopPropagation()} onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">{children}</div>
+      </div>
+    </>
+  );
+}
+
+function TweakSection({ label, children }) {
+  return (<><div className="twk-sect">{label}</div>{children}</>);
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value} onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    const resolve = (s) => {
+      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    };
+    return <TweakSelect label={label} value={value} options={options} onChange={(s) => onChange(resolve(s))} />;
+  }
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`, width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>{o.label}</button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+// ─── Edge.jsx ─────────────────────────────────────────────────────────────────
+
+function edgeGeometry(p0, p1) {
+  const dx = Math.abs(p1.x - p0.x);
+  const off = Math.max(55, dx * 0.5);
+  const c0 = { x: p0.x + off, y: p0.y };
+  const c1 = { x: p1.x - off, y: p1.y };
+  const d = `M ${p0.x} ${p0.y} C ${c0.x} ${c0.y} ${c1.x} ${c1.y} ${p1.x} ${p1.y}`;
+  const mid = {
+    x: 0.125 * p0.x + 0.375 * c0.x + 0.375 * c1.x + 0.125 * p1.x,
+    y: 0.125 * p0.y + 0.375 * c0.y + 0.375 * c1.y + 0.125 * p1.y,
+  };
+  return { d, mid };
+}
+
+function EdgePath({ p0, p1, color, selected, dim, amount, edgeStyle, onSelect }) {
+  const { d } = edgeGeometry(p0, p1);
+  const stroke = color.line;
+  const w = Math.max(1.5, Math.min(3, 1.4 + Math.sqrt(Math.max(0, amount)) / 34));
+  const cls =
+    edgeStyle === 'solid' ? 'edge-solid' :
+    edgeStyle === 'dots' ? 'edge-dots' : 'edge-snake';
+  return (
+    <g className={'edge ' + (selected ? 'is-sel ' : '') + (dim ? 'is-dim' : '')}
+       onMouseDown={(e) => { e.stopPropagation(); onSelect(); }}>
+      <path d={d} stroke="transparent" strokeWidth={18} fill="none" style={{ cursor: 'pointer' }} />
+      {selected && <path d={d} stroke={color.ring} strokeWidth={w + 6} fill="none" strokeLinecap="round" opacity="0.6" />}
+      <path className={cls} d={d} stroke={stroke} strokeWidth={selected ? w + 0.6 : w} strokeLinecap="round" fill="none" />
+    </g>
+  );
+}
+
+function EdgeLabel({ p0, p1, mode, value, amount, percentEquiv, color, selected, onChange, onDelete, onSelect }) {
+  const { mid } = edgeGeometry(p0, p1);
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+  const inputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (editing && inputRef.current) { inputRef.current.focus(); inputRef.current.select(); }
+  }, [editing]);
+
+  const commit = () => {
+    const num = parseFloat(String(draft).replace(/[^0-9.]/g, ''));
+    if (!isNaN(num)) onChange(num);
+    setEditing(false);
+  };
+
+  const primary = mode === '%' ? fmtPct(value) : fmtMoney(value, { cents: value % 1 !== 0 });
+  const secondary = mode === '%' ? fmtMoney(amount) : fmtPct(percentEquiv);
+
+  return (
+    <div
+      className={'edge-pill ' + (selected ? 'is-sel' : '')}
+      style={{ left: mid.x, top: mid.y, '--pill-ink': color.ink, '--pill-soft': color.soft, '--pill-ring': color.ring }}
+      onMouseDown={(e) => { e.stopPropagation(); onSelect(); }}
+    >
+      {editing ? (
+        <div className="edge-pill-edit">
+          {mode === '$' && <span className="edge-pill-unit">$</span>}
+          <input ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+            inputMode="decimal" />
+          {mode === '%' && <span className="edge-pill-unit">%</span>}
+        </div>
+      ) : (
+        <button className="edge-pill-face"
+          onClick={(e) => { e.stopPropagation(); setDraft(String(value)); setEditing(true); }}
+          title="Click to edit allocation">
+          <span className="edge-pill-primary">{primary}</span>
+          <span className="edge-pill-secondary">{secondary}</span>
+        </button>
+      )}
+      {selected && (
+        <button className="edge-pill-del" onMouseDown={(e) => { e.stopPropagation(); onDelete(); }} title="Delete connection">
+          <svg viewBox="0 0 24 24" width="13" height="13"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" fill="none"/></svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Node.jsx ─────────────────────────────────────────────────────────────────
+
+function Icon({ name, size }) {
+  const d = ICONS[name] || ICONS.coins;
+  return (
+    <svg viewBox="0 0 24 24" width={size || 18} height={size || 18} fill="none"
+      stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+  );
+}
+
+function MoneyNode({ node, received, allocated, leftover, color, selected, connectTarget, isConnecting,
+    onSelect, onRename, onChangeMode, onChangeAmount, onDelete, onCycleColor,
+    onStartConnect, onEndConnect, cents }) {
+
+  const [editName, setEditName] = React.useState(false);
+  const nameRef = React.useRef(null);
+  React.useEffect(() => {
+    if (editName && nameRef.current) { nameRef.current.focus(); nameRef.current.select(); }
+  }, [editName]);
+
+  const isIncome = node.type === 'income';
+  const avail = isIncome ? (Number(node.amount) || 0) : received;
+  const over = leftover < -0.005;
+  const fullyOut = Math.abs(leftover) < 0.005 && allocated > 0;
+  const pct = avail > 0 ? Math.max(0, Math.min(1, allocated / avail)) : 0;
+
+  const leftLabel = isIncome
+    ? (over ? 'Over budget' : fullyOut ? 'All assigned' : 'Unassigned')
+    : (over ? 'Over' : allocated > 0 ? 'Kept here' : 'Lands here');
+  const leftState = over ? 'bad' : (isIncome && fullyOut ? 'good' : isIncome ? 'warn' : 'calm');
+
+  return (
+    <div
+      className={'node ' + (selected ? 'is-sel ' : '') + (isIncome ? 'is-income ' : '') + (connectTarget ? 'is-target' : '')}
+      style={{ left: node.x, top: node.y, '--c-soft': color.soft, '--c-ink': color.ink, '--c-line': color.line, '--c-ring': color.ring }}
+      data-node-id={node.id}
+      onMouseDown={() => onSelect()}
+      onMouseUp={() => { if (isConnecting) onEndConnect(node); }}
+    >
+      {!isIncome && (
+        <div className="handle handle-in" data-nodrag
+          onMouseUp={(e) => { e.stopPropagation(); if (isConnecting) onEndConnect(node); }}>
+          <span />
+        </div>
+      )}
+
+      <div className="node-head">
+        <button className="node-chip" data-nodrag title="Change color"
+          onClick={(e) => { e.stopPropagation(); if (!isIncome) onCycleColor(); }}>
+          <Icon name={node.icon} size={17} />
+        </button>
+        {editName ? (
+          <input ref={nameRef} className="node-name editing" data-nodrag value={node.name}
+            onChange={(e) => onRename(e.target.value)}
+            onMouseDown={(e) => e.stopPropagation()}
+            onBlur={() => setEditName(false)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); setEditName(false); } }}
+            spellCheck={false} />
+        ) : (
+          <div className="node-name node-name-txt" title="Double-click to rename"
+            onDoubleClick={(e) => { e.stopPropagation(); setEditName(true); }}>{node.name}</div>
+        )}
+        {!isIncome && (
+          <button className="node-del" data-nodrag title="Delete node"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}>
+            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" fill="none"/></svg>
+          </button>
+        )}
+      </div>
+
+      <div className="node-body">
+        {isIncome ? (
+          <label className="amount-field" data-nodrag onMouseDown={(e) => e.stopPropagation()}>
+            <span className="amount-cur">$</span>
+            <input className="amount-input" inputMode="decimal" value={node.amount}
+              onChange={(e) => onChangeAmount(e.target.value.replace(/[^0-9.]/g, ''))} />
+          </label>
+        ) : (
+          <div className="node-amount">{fmtMoney(avail, { cents })}</div>
+        )}
+
+        <div className="node-meter" title={`${fmtMoney(allocated)} of ${fmtMoney(avail)} sent on`}>
+          <div className={'node-meter-fill ' + (over ? 'is-over' : '')} style={{ width: (over ? 100 : pct * 100) + '%' }} />
+        </div>
+
+        <div className="node-foot">
+          <div className="mode-toggle" data-nodrag onMouseDown={(e) => e.stopPropagation()}>
+            <button className={node.mode === '%' ? 'on' : ''} onClick={(e) => { e.stopPropagation(); onChangeMode('%'); }}>%</button>
+            <button className={node.mode === '$' ? 'on' : ''} onClick={(e) => { e.stopPropagation(); onChangeMode('$'); }}>$</button>
+          </div>
+          <div className={'leftover ' + leftState}>
+            <span className="leftover-lbl">{leftLabel}</span>
+            <span className="leftover-val">{fmtMoney(Math.abs(leftover), { cents })}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="handle handle-out" data-nodrag title="Drag to connect"
+        onMouseDown={(e) => { e.stopPropagation(); onStartConnect(node, e); }}>
+        <span />
+      </div>
+    </div>
+  );
+}
+
+// ─── Canvas.jsx ───────────────────────────────────────────────────────────────
+
+const NODE_W = 232;
+const HANDLE_DY = 30;
+function handlePos(node, side) {
+  return { x: node.x + (side === 'out' ? NODE_W : 0), y: node.y + HANDLE_DY };
+}
+
+function Canvas({ nodes, edges, flow, selected, api, t }) {
+  const wrapRef = React.useRef(null);
+  const [view, setView] = React.useState({ x: 40, y: 20, z: 1 });
+  const drag = React.useRef(null);
+  const [connect, setConnect] = React.useState(null);
+  const [hoverTarget, setHoverTarget] = React.useState(null);
+
+  const toCanvas = (cx, cy) => {
+    const r = wrapRef.current.getBoundingClientRect();
+    return { x: (cx - r.left - view.x) / view.z, y: (cy - r.top - view.y) / view.z };
+  };
+
+  React.useEffect(() => {
+    const move = (e) => {
+      const d = drag.current;
+      if (d && d.kind === 'pan') {
+        setView(v => ({ ...v, x: d.ox + (e.clientX - d.sx), y: d.oy + (e.clientY - d.sy) }));
+      } else if (d && d.kind === 'node') {
+        const p = toCanvas(e.clientX, e.clientY);
+        api.moveNode(d.id, Math.round(d.nx + (p.x - d.px)), Math.round(d.ny + (p.y - d.py)));
+      } else if (connect) {
+        const p = toCanvas(e.clientX, e.clientY);
+        setConnect(c => c && ({ ...c, cur: p }));
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const host = el && el.closest('[data-node-id]');
+        const tid = host ? host.getAttribute('data-node-id') : null;
+        setHoverTarget(tid && tid !== connect.fromId ? tid : null);
+      }
+    };
+    const up = (e) => {
+      if (connect) {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const host = el && el.closest('[data-node-id]');
+        const tid = host ? host.getAttribute('data-node-id') : null;
+        const p = toCanvas(e.clientX, e.clientY);
+        const moved = connect.start ? Math.hypot(p.x - connect.start.x, p.y - connect.start.y) : 99;
+        if (tid && tid !== connect.fromId) {
+          api.createEdge(connect.fromId, tid);
+        } else if (!tid && moved > 14 && !(el && el.closest('.toolbar, .hint-bar, .twk-panel'))) {
+          api.createBucketAt(connect.fromId, p.x, p.y);
+        }
+        setConnect(null); setHoverTarget(null);
+      }
+      drag.current = null;
+      document.body.classList.remove('grabbing');
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+  }, [connect, view, api]);
+
+  const onBgDown = (e) => {
+    if (e.button !== 0) return;
+    api.select(null);
+    drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y };
+    document.body.classList.add('grabbing');
+  };
+
+  const onNodeDown = (node, e) => {
+    if (e.target.closest('[data-nodrag]')) return;
+    const p = toCanvas(e.clientX, e.clientY);
+    drag.current = { kind: 'node', id: node.id, nx: node.x, ny: node.y, px: p.x, py: p.y };
+  };
+
+  const onWheel = (e) => {
+    e.preventDefault();
+    const r = wrapRef.current.getBoundingClientRect();
+    const sx = e.clientX - r.left, sy = e.clientY - r.top;
+    setView(v => {
+      const nz = Math.max(0.4, Math.min(1.8, v.z * (e.deltaY < 0 ? 1.08 : 0.926)));
+      const cx = (sx - v.x) / v.z, cy = (sy - v.y) / v.z;
+      return { z: nz, x: sx - cx * nz, y: sy - cy * nz };
+    });
+  };
+
+  React.useEffect(() => {
+    api._setView = setView;
+    api._spawn = () => {
+      const r = wrapRef.current.getBoundingClientRect();
+      const c = toCanvas(r.left + r.width * 0.42, r.top + r.height * 0.4);
+      return { x: Math.round(c.x), y: Math.round(c.y) };
+    };
+  }, [api, view]);
+
+  return (
+    <div ref={wrapRef} className={'canvas grid-' + (t.grid || 'dots')} onMouseDown={onBgDown} onWheel={onWheel}>
+      <div className="board" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }}>
+        <div className="grid-bg" />
+        <svg className="edge-layer" width="12000" height="12000">
+          {edges.map(ed => {
+            const a = nodes.find(n => n.id === ed.from), b = nodes.find(n => n.id === ed.to);
+            if (!a || !b) return null;
+            const color = a.type === 'income' ? colorFor('emerald') : colorFor(a.color);
+            return (
+              <EdgePath key={ed.id} p0={handlePos(a, 'out')} p1={handlePos(b, 'in')}
+                color={color} selected={selected && selected.type === 'edge' && selected.id === ed.id}
+                dim={selected && !(selected.type === 'edge' && selected.id === ed.id) && selected.type === 'edge'}
+                amount={flow.edgeAmt[ed.id] || 0} edgeStyle={t.edge}
+                onSelect={() => api.select({ type: 'edge', id: ed.id })} />
+            );
+          })}
+          {connect && (() => {
+            const a = nodes.find(n => n.id === connect.fromId);
+            const col = a.type === 'income' ? colorFor('emerald') : colorFor(a.color);
+            const g = edgeGeometry(handlePos(a, 'out'), connect.cur);
+            return <path className="edge-temp" d={g.d} stroke={col.line} strokeWidth="2" fill="none" strokeLinecap="round" />;
+          })()}
+        </svg>
+
+        {nodes.map(node => {
+          const color = node.type === 'income' ? colorFor('emerald') : colorFor(node.color);
+          return (
+            <div key={node.id} onMouseDown={(e) => onNodeDown(node, e)}>
+              <MoneyNode
+                node={node} color={color}
+                received={flow.received[node.id] || 0}
+                allocated={flow.allocated[node.id] || 0}
+                leftover={flow.leftover[node.id] || 0}
+                selected={selected && selected.type === 'node' && selected.id === node.id}
+                connectTarget={hoverTarget === node.id}
+                isConnecting={!!connect}
+                cents={t.cents}
+                onSelect={() => api.select({ type: 'node', id: node.id })}
+                onRename={(v) => api.rename(node.id, v)}
+                onChangeMode={(m) => api.changeMode(node.id, m)}
+                onChangeAmount={(v) => api.changeAmount(node.id, v)}
+                onDelete={() => api.deleteNode(node.id)}
+                onCycleColor={() => api.cycleColor(node.id)}
+                onStartConnect={(n, e) => {
+                  const p = toCanvas(e.clientX, e.clientY);
+                  setConnect({ fromId: n.id, cur: p, start: p });
+                }}
+                onEndConnect={(n) => { if (connect && n.id !== connect.fromId) api.createEdge(connect.fromId, n.id); }}
+              />
+            </div>
+          );
+        })}
+
+        <div className="pill-layer">
+          {edges.map(ed => {
+            const a = nodes.find(n => n.id === ed.from), b = nodes.find(n => n.id === ed.to);
+            if (!a || !b) return null;
+            const color = a.type === 'income' ? colorFor('emerald') : colorFor(a.color);
+            const amt = flow.edgeAmt[ed.id] || 0;
+            const avail = a.type === 'income' ? (Number(a.amount) || 0) : (flow.received[a.id] || 0);
+            const pctEq = avail > 0 ? (amt / avail) * 100 : 0;
+            return (
+              <EdgeLabel key={ed.id} p0={handlePos(a, 'out')} p1={handlePos(b, 'in')}
+                mode={a.mode} value={ed.value} amount={amt} percentEquiv={pctEq} color={color}
+                selected={selected && selected.type === 'edge' && selected.id === ed.id}
+                onChange={(v) => api.updateEdgeValue(ed.id, v)}
+                onDelete={() => api.deleteEdge(ed.id)}
+                onSelect={() => api.select({ type: 'edge', id: ed.id })} />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── App.jsx ──────────────────────────────────────────────────────────────────
+
+const TWEAK_DEFAULTS = { theme: 'cloud', edge: 'snake', grid: 'dots', cents: false };
+const THEMES = { cloud: 'Soft Cloud', mint: 'Mint Ledger', paper: 'Warm Paper', slate: 'Slate Pro' };
+
+function Brand() {
+  return (
+    <div className="brand">
+      <div className="brand-mark">
+        <svg viewBox="0 0 32 32" width="22" height="22" fill="none">
+          <circle cx="7" cy="9" r="3.4" stroke="currentColor" strokeWidth="2.2" />
+          <circle cx="25" cy="7" r="2.6" stroke="currentColor" strokeWidth="2.2" />
+          <circle cx="24" cy="24" r="2.6" stroke="currentColor" strokeWidth="2.2" />
+          <path d="M10 10.5C16 13 14 20 22 23M9.6 11.2C14 12 18 9.5 22.4 7.6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeDasharray="0.1 4" />
+        </svg>
+      </div>
+      <div className="brand-text">money<span>flow</span></div>
+    </div>
+  );
+}
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [graph, setGraph] = React.useState(() => PRESETS.fifty.build());
+  const [selected, setSelected] = React.useState(null);
+  const [presetKey, setPresetKey] = React.useState('fifty');
+
+  const flow = React.useMemo(() => computeFlow(graph.nodes, graph.edges), [graph]);
+
+  const api = React.useRef({}).current;
+  api.select = (sel) => setSelected(sel);
+  api.moveNode = (id, x, y) => setGraph(g => ({ ...g, nodes: g.nodes.map(n => n.id === id ? { ...n, x, y } : n) }));
+  api.rename = (id, name) => setGraph(g => ({ ...g, nodes: g.nodes.map(n => n.id === id ? { ...n, name } : n) }));
+  api.changeAmount = (id, amount) => setGraph(g => ({ ...g, nodes: g.nodes.map(n => n.id === id ? { ...n, amount } : n) }));
+  api.cycleColor = (id) => setGraph(g => {
+    const n = g.nodes.find(x => x.id === id); if (!n) return g;
+    const i = PALETTE.findIndex(p => p.key === n.color);
+    const next = PALETTE[(i + 1) % PALETTE.length].key;
+    return { ...g, nodes: g.nodes.map(x => x.id === id ? { ...x, color: next } : x) };
+  });
+  api.changeMode = (id, mode) => setGraph(g => {
+    const node = g.nodes.find(n => n.id === id);
+    if (!node || node.mode === mode) return g;
+    const f = computeFlow(g.nodes, g.edges);
+    const avail = node.type === 'income' ? (Number(node.amount) || 0) : (f.received[id] || 0);
+    const edges = g.edges.map(e => {
+      if (e.from !== id) return e;
+      const amt = f.edgeAmt[e.id] || 0;
+      let value;
+      if (mode === '%') value = avail > 0 ? Math.round((amt / avail) * 1000) / 10 : 0;
+      else value = Math.round(amt);
+      return { ...e, value };
+    });
+    return { ...g, edges, nodes: g.nodes.map(n => n.id === id ? { ...n, mode } : n) };
+  });
+  api.createEdge = (from, to) => setGraph(g => {
+    if (from === to) return g;
+    const target = g.nodes.find(n => n.id === to);
+    if (!target || target.type === 'income') return g;
+    if (g.edges.some(e => e.from === from && e.to === to)) return g;
+    const src = g.nodes.find(n => n.id === from);
+    const f = computeFlow(g.nodes, g.edges);
+    const avail = src.type === 'income' ? (Number(src.amount) || 0) : (f.received[from] || 0);
+    const remaining = Math.max(0, avail - (f.allocated[from] || 0));
+    const value = src.mode === '%'
+      ? (avail > 0 ? Math.max(0, Math.round((remaining / avail) * 100)) : 0)
+      : Math.round(remaining);
+    const e = { id: uid('e'), from, to, value };
+    setSelected({ type: 'edge', id: e.id });
+    return { ...g, edges: [...g.edges, e] };
+  });
+  api.updateEdgeValue = (id, value) => setGraph(g => ({ ...g, edges: g.edges.map(e => e.id === id ? { ...e, value } : e) }));
+  api.deleteEdge = (id) => { setGraph(g => ({ ...g, edges: g.edges.filter(e => e.id !== id) })); setSelected(null); };
+  api.deleteNode = (id) => setGraph(g => {
+    const n = g.nodes.find(x => x.id === id);
+    if (!n || n.type === 'income') return g;
+    return { nodes: g.nodes.filter(x => x.id !== id), edges: g.edges.filter(e => e.from !== id && e.to !== id) };
+  });
+  api.addNode = () => setGraph(g => {
+    const sp = api._spawn ? api._spawn() : { x: 480, y: 280 };
+    const usedColors = g.nodes.filter(n => n.type === 'bucket').length;
+    const color = PALETTE[usedColors % PALETTE.length].key;
+    const node = { id: uid('n'), type: 'bucket', name: 'New Bucket', icon: 'coins', color, mode: '%', x: sp.x - NODE_W / 2, y: sp.y - 50 };
+    setSelected({ type: 'node', id: node.id });
+    return { ...g, nodes: [...g.nodes, node] };
+  });
+  api.createBucketAt = (from, x, y) => setGraph(g => {
+    const src = g.nodes.find(n => n.id === from);
+    if (!src) return g;
+    const usedColors = g.nodes.filter(n => n.type === 'bucket').length;
+    const color = PALETTE[usedColors % PALETTE.length].key;
+    const node = { id: uid('n'), type: 'bucket', name: 'New Bucket', icon: 'coins', color, mode: '%', x: Math.round(x), y: Math.round(y - HANDLE_DY) };
+    const f = computeFlow(g.nodes, g.edges);
+    const avail = src.type === 'income' ? (Number(src.amount) || 0) : (f.received[from] || 0);
+    const remaining = Math.max(0, avail - (f.allocated[from] || 0));
+    const value = src.mode === '%'
+      ? (avail > 0 ? Math.max(0, Math.round((remaining / avail) * 100)) : 0)
+      : Math.round(remaining);
+    const e = { id: uid('e'), from, to: node.id, value };
+    setSelected({ type: 'node', id: node.id });
+    return { nodes: [...g.nodes, node], edges: [...g.edges, e] };
+  });
+  api.loadPreset = (key) => { setPresetKey(key); setGraph(PRESETS[key].build()); setSelected(null); if (api._setView) api._setView({ x: 40, y: 20, z: 1 }); };
+  api.recenter = () => { if (api._setView) api._setView({ x: 40, y: 20, z: 1 }); };
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName);
+      if (e.key === 'Escape') { setSelected(null); document.activeElement && document.activeElement.blur(); return; }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selected && !typing) {
+        e.preventDefault();
+        if (selected.type === 'edge') api.deleteEdge(selected.id);
+        else api.deleteNode(selected.id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected]);
+
+  const summary = React.useMemo(() => {
+    let income = 0, assigned = 0;
+    graph.nodes.forEach(n => {
+      if (n.type === 'income') { income += Number(n.amount) || 0; assigned += flow.allocated[n.id] || 0; }
+    });
+    return { income, assigned, free: income - assigned };
+  }, [graph, flow]);
+
+  const freeState = Math.abs(summary.free) < 0.5 ? 'good' : summary.free < 0 ? 'bad' : 'warn';
+
+  return (
+    <div className="app" data-theme={t.theme}>
+      <header className="toolbar">
+        <Brand />
+        <div className="tb-divider" />
+        <div className="tb-group">
+          <label className="preset-select">
+            <span className="preset-ico">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg>
+            </span>
+            <select value={presetKey} onChange={(e) => api.loadPreset(e.target.value)}>
+              {Object.keys(PRESETS).map(k => <option key={k} value={k}>{PRESETS[k].label}</option>)}
+            </select>
+          </label>
+          <button className="tb-btn primary" onClick={() => api.addNode()}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Add bucket
+          </button>
+          <button className="tb-btn ghost" onClick={() => api.recenter()} title="Recenter board">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
+          </button>
+          <button className="tb-btn ghost" onClick={() => window.__tweaksOpen && window.__tweaksOpen(v => !v)} title="Open tweaks">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+          </button>
+        </div>
+        <div className="tb-spacer" />
+        <div className="summary">
+          <div className="sum-item">
+            <span className="sum-lbl">Take-home</span>
+            <span className="sum-val">{fmtMoney(summary.income)}</span>
+          </div>
+          <div className="sum-sep" />
+          <div className="sum-item">
+            <span className="sum-lbl">Assigned</span>
+            <span className="sum-val">{fmtMoney(summary.assigned)}</span>
+          </div>
+          <div className="sum-sep" />
+          <div className={'sum-item free ' + freeState}>
+            <span className="sum-lbl">{summary.free < -0.5 ? 'Over budget' : 'Unassigned'}</span>
+            <span className="sum-val">{fmtMoney(Math.abs(summary.free))}</span>
+          </div>
+        </div>
+      </header>
+
+      <Canvas nodes={graph.nodes} edges={graph.edges} flow={flow} selected={selected} api={api} t={t} />
+
+      <div className="hint-bar">
+        <span><b>Drag</b> a card's right-edge dot onto another card — or drop on empty space to spawn a bucket.</span>
+        <span><b>Click</b> a line's pill to set a % or $.</span>
+        <span><b>Drag</b> empty space to pan · scroll to zoom.</span>
+      </div>
+
+      <TweaksPanel>
+        <TweakSection label="Look & feel" />
+        <TweakSelect label="Theme" value={t.theme}
+          options={Object.keys(THEMES).map(k => ({ value: k, label: THEMES[k] }))}
+          onChange={(v) => setTweak('theme', v)} />
+        <TweakRadio label="Flow line" value={t.edge} options={['snake', 'dots', 'solid']}
+          onChange={(v) => setTweak('edge', v)} />
+        <TweakRadio label="Board grid" value={t.grid} options={['dots', 'lines', 'none']}
+          onChange={(v) => setTweak('grid', v)} />
+        <TweakToggle label="Show cents" value={t.cents} onChange={(v) => setTweak('cents', v)} />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
