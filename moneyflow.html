@@ -403,7 +403,7 @@ const fmt$ = (n, cents) => {
   const v = Math.abs(n) < .005 ? 0 : n;
   return '$' + v.toLocaleString('en-US', { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 });
 };
-const fmt% = n => { const v = Math.round(n * 10) / 10; return (Number.isInteger(v) ? v : v.toFixed(1)) + '%'; };
+const fmtPct = n => { const v = Math.round(n * 10) / 10; return (Number.isInteger(v) ? v : v.toFixed(1)) + '%'; };
 const uid = p => (p || 'x') + '_' + Math.random().toString(36).slice(2, 8);
 
 // ── palette ──────────────────────────────────────────────────────────────────
@@ -694,8 +694,8 @@ function EdgePill({ p0, p1, mode, value, amt, pctEq, color, sel, onChange, onDel
   const inp = React.useRef(null);
   React.useEffect(() => { if (ed && inp.current) { inp.current.focus(); inp.current.select(); } }, [ed]);
   const commit = () => { const n = parseFloat(String(draft).replace(/[^0-9.]/g,'')); if(!isNaN(n)) onChange(n); setEd(false); };
-  const primary   = mode === '%' ? fmt%(value) : fmt$(value, value%1!==0);
-  const secondary = mode === '%' ? fmt$(amt)   : fmt%(pctEq);
+  const primary   = mode === '%' ? fmtPct(value) : fmt$(value, value%1!==0);
+  const secondary = mode === '%' ? fmt$(amt)     : fmtPct(pctEq);
   return (
     <div className={'pill' + (sel ? ' sel' : '')}
          style={{ left:mid.x, top:mid.y, '--pi':color.l }}
