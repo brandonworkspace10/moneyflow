@@ -913,6 +913,7 @@ function Canvas({ nodes, edges, flow, sel, api, t }) {
   };
   const onND = (node, e) => {
     if (e.target.closest('[data-nodrag]')) return;
+    e.stopPropagation();
     const p = toC(e.clientX, e.clientY);
     drag.current = { kind:'node', id:node.id, nx:node.x, ny:node.y, px:p.x, py:p.y };
   };
